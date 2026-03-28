@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -29,6 +30,8 @@
   .streak-label { font-size: 12px; color: #888; margin-bottom: 1rem; }
   .evolve-btn { background: #7F77DD; color: #fff; border: none; border-radius: 8px; padding: 9px 22px; font-size: 13px; cursor: pointer; display: none; }
   .evolve-btn:hover { background: #534AB7; }
+  .reset-btn { background: none; border: 0.5px solid rgba(0,0,0,0.18); border-radius: 8px; padding: 6px 14px; font-size: 12px; color: #888; cursor: pointer; margin-top: 8px; }
+  .reset-btn:hover { background: #f5f4f0; color: #1a1a1a; }
   .log-title { font-size: 15px; font-weight: 500; margin-bottom: 1rem; }
   .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
   .field { display: flex; flex-direction: column; gap: 4px; }
@@ -44,6 +47,7 @@
   .feed-text { font-size: 13px; line-height: 1.4; }
   .feed-meta { font-size: 11px; color: #888; margin-top: 2px; }
   .empty-feed { font-size: 13px; color: #aaa; }
+  .save-badge { font-size: 11px; color: #1D9E75; text-align: center; margin-top: 4px; }
   .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #534AB7; color: #fff; padding: 10px 20px; border-radius: 10px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 999; white-space: nowrap; }
   .toast.show { opacity: 1; }
   @media (prefers-color-scheme: dark) {
@@ -58,6 +62,8 @@
     .submit-btn:hover { background: #2a2830; }
     .xp-track { background: #2a2830; }
     .streak-pip { background: #2a2830; }
+    .reset-btn { border-color: rgba(255,255,255,0.15); color: #888; }
+    .reset-btn:hover { background: #2a2830; color: #e8e6f0; }
   }
 </style>
 </head>
@@ -95,6 +101,9 @@
     <div class="streak-label" id="streakLabel">Log 7 days in a row to unlock bonus XP</div>
 
     <button class="evolve-btn" id="evolveBtn" onclick="evolve()">Evolve Orb →</button>
+    <div class="save-badge" id="saveBadge"></div>
+    <br>
+    <button class="reset-btn" onclick="resetPet()">Reset pet</button>
   </div>
 
   <div class="card">
@@ -128,9 +137,51 @@ const STAGES = [
   { name:"Nexus", label:"Radiant",  xpMax:Infinity, hue:290, speed:0.020, mag:0.23, nf:6 },
 ];
 const COLORS = ["#7F77DD","#378ADD","#1D9E75","#D4537E"];
+const SAVE_KEY = "orb_pet_save";
 
 let G = { xp:0, stage:0, streak:0, hours:0, commits:0, days:0, lastDate:null, feed:[] };
 let tick=0, energy=0, energyTarget=0;
+
+// --- Save & Load ---
+function saveProgress(){
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(G));
+    const badge = document.getElementById("saveBadge");
+    badge.textContent = "✓ Progress saved";
+    clearTimeout(badge._t);
+    badge._t = setTimeout(() => badge.textContent = "", 2000);
+  } catch(e) {}
+}
+
+function loadProgress(){
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if(raw){
+      G = JSON.parse(raw);
+      // restore UI
+      document.getElementById("valStreak").textContent = G.streak;
+      document.getElementById("valHours").textContent = G.hours;
+      document.getElementById("valCommits").textContent = G.commits;
+      document.getElementById("moodText").textContent = getMood(G.hours, G.commits, G.streak);
+      document.getElementById("orbState").textContent = G.feed.length > 0 ? STAGES[G.stage].label : "Dormant — awaiting your first session";
+      updateXP(); updatePips(); renderFeed();
+    }
+  } catch(e) {}
+}
+
+function resetPet(){
+  if(!confirm("Reset all progress? This cannot be undone.")) return;
+  localStorage.removeItem(SAVE_KEY);
+  G = { xp:0, stage:0, streak:0, hours:0, commits:0, days:0, lastDate:null, feed:[] };
+  document.getElementById("valStreak").textContent = 0;
+  document.getElementById("valHours").textContent = 0;
+  document.getElementById("valCommits").textContent = 0;
+  document.getElementById("moodText").textContent = "Start coding to wake me up...";
+  document.getElementById("orbState").textContent = "Dormant — awaiting your first session";
+  document.getElementById("evolveBtn").style.display = "none";
+  updateXP(); updatePips(); renderFeed();
+  showToast("Pet reset — fresh start!");
+}
 
 function todayStr(){ return new Date().toDateString(); }
 
@@ -169,6 +220,7 @@ function evolve(){
   document.getElementById("orbState").textContent=STAGES[G.stage].label+" — evolved!";
   showToast("Orb evolved to "+STAGES[G.stage].name+"!");
   updateXP();
+  saveProgress();
 }
 
 function getMood(h,c,s){
@@ -215,6 +267,8 @@ function logSession(){
   if(G.feed.length>8) G.feed.pop();
   renderFeed();
   showToast("+"+xp+" XP — Orb energized!");
+
+  saveProgress(); // 💾 save after every session
 }
 
 function renderFeed(){
@@ -256,7 +310,6 @@ function drawOrb(){
   ctx.clearRect(0,0,W,H);
   tick++;
 
-  // ease energy
   if(energyTarget>energy) energy=Math.min(energy+2.5,energyTarget);
   else energy=Math.max(energy-0.6,0);
   if(energy>=energyTarget&&energyTarget>0) energyTarget=0;
@@ -267,10 +320,8 @@ function drawOrb(){
   const t=tick*st.speed;
   const mag=st.mag+energy*0.001;
   const N=100;
-
   const hue=st.hue+Math.sin(t*0.25)*15;
 
-  // build blob points
   const pts=[];
   for(let i=0;i<N;i++){
     const a=(i/N)*Math.PI*2;
@@ -278,7 +329,6 @@ function drawOrb(){
     pts.push([cx+r*Math.cos(a),cy+r*Math.sin(a)]);
   }
 
-  // outer glow layers (flat transparency)
   for(let g=5;g>=1;g--){
     const sc=1+g*0.05;
     ctx.beginPath();
@@ -291,14 +341,12 @@ function drawOrb(){
     ctx.fill();
   }
 
-  // main body
   ctx.beginPath();
   pts.forEach(([px,py],i)=>i===0?ctx.moveTo(px,py):ctx.lineTo(px,py));
   ctx.closePath();
   ctx.fillStyle=`hsl(${hue},62%,58%)`;
   ctx.fill();
 
-  // inner highlight blob
   const ipts=[];
   for(let i=0;i<N;i++){
     const a=(i/N)*Math.PI*2;
@@ -311,7 +359,6 @@ function drawOrb(){
   ctx.fillStyle=`hsla(${hue+30},80%,82%,0.3)`;
   ctx.fill();
 
-  // orbiting particles (stage 1+)
   if(G.stage>=1){
     const np=2+G.stage*2;
     for(let i=0;i<np;i++){
@@ -325,7 +372,6 @@ function drawOrb(){
     }
   }
 
-  // ripple ring on fresh energy burst
   if(energy>40){
     const rr=baseR*(1.55+(100-energy)*0.01);
     ctx.beginPath();
@@ -338,7 +384,9 @@ function drawOrb(){
   requestAnimationFrame(drawOrb);
 }
 
-updatePips(); updateXP(); drawOrb();
+// Load saved progress on startup, then start drawing
+loadProgress();
+drawOrb();
 </script>
 </body>
 </html>
