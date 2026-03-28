@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orb — Your Coding Companion</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f5f4f0; color: #1a1a1a; min-height: 100vh; padding: 1.5rem 1rem; }
+  .container { max-width: 500px; margin: 0 auto; }
+  .card { background: #fff; border: 0.5px solid rgba(0,0,0,0.12); border-radius: 14px; padding: 1.5rem; margin-bottom: 1rem; }
+  .pet-wrap { text-align: center; }
+  .orb-name { font-size: 20px; font-weight: 500; margin-bottom: 2px; }
+  .orb-state { font-size: 13px; color: #777; margin-bottom: 0.25rem; }
+  canvas { display: block; margin: 0 auto; }
+  .mood-text { font-size: 13px; color: #777; margin: 0.6rem 0 1rem; min-height: 18px; }
+  .habit-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 1rem; }
+  .habit-box { background: #f5f4f0; border-radius: 10px; padding: 0.65rem 0.5rem; text-align: center; }
+  .habit-val { font-size: 22px; font-weight: 500; }
+  .habit-lbl { font-size: 11px; color: #888; margin-top: 2px; }
+  .xp-track { background: #eeecf8; border-radius: 99px; height: 6px; overflow: hidden; }
+  .xp-fill { height: 100%; border-radius: 99px; transition: width 0.5s cubic-bezier(.4,0,.2,1); }
+  .xp-row { display: flex; justify-content: space-between; align-items: center; margin-top: 5px; margin-bottom: 1rem; }
+  .xp-label { font-size: 12px; color: #888; }
+  .xp-stage { font-size: 12px; font-weight: 500; }
+  .streak-row { display: flex; align-items: center; justify-content: center; gap: 6px; margin-bottom: 4px; }
+  .streak-pip { width: 10px; height: 10px; border-radius: 50%; background: #e0ddf5; transition: background 0.3s; }
+  .streak-pip.on { background: #7F77DD; }
+  .streak-label { font-size: 12px; color: #888; margin-bottom: 1rem; }
+  .evolve-btn { background: #7F77DD; color: #fff; border: none; border-radius: 8px; padding: 9px 22px; font-size: 13px; cursor: pointer; display: none; }
+  .evolve-btn:hover { background: #534AB7; }
+  .log-title { font-size: 15px; font-weight: 500; margin-bottom: 1rem; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 12px; color: #666; }
+  .field input { padding: 8px 10px; font-size: 14px; border: 0.5px solid rgba(0,0,0,0.18); border-radius: 8px; background: #fff; color: #1a1a1a; outline: none; width: 100%; }
+  .field input:focus { border-color: #7F77DD; box-shadow: 0 0 0 3px rgba(127,119,221,0.12); }
+  .submit-btn { width: 100%; padding: 10px; font-size: 13px; cursor: pointer; border: 0.5px solid rgba(0,0,0,0.18); border-radius: 8px; background: #fff; color: #1a1a1a; }
+  .submit-btn:hover { background: #f5f4f0; }
+  .feed-title { font-size: 15px; font-weight: 500; margin-bottom: 0.9rem; }
+  .feed-item { display: flex; align-items: flex-start; gap: 10px; padding: 9px 0; border-bottom: 0.5px solid rgba(0,0,0,0.07); }
+  .feed-item:last-child { border-bottom: none; padding-bottom: 0; }
+  .feed-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+  .feed-text { font-size: 13px; line-height: 1.4; }
+  .feed-meta { font-size: 11px; color: #888; margin-top: 2px; }
+  .empty-feed { font-size: 13px; color: #aaa; }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #534AB7; color: #fff; padding: 10px 20px; border-radius: 10px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 999; white-space: nowrap; }
+  .toast.show { opacity: 1; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #18171a; color: #e8e6f0; }
+    .card { background: #222126; border-color: rgba(255,255,255,0.09); }
+    .habit-box { background: #18171a; }
+    .habit-val { color: #e8e6f0; }
+    .orb-name { color: #e8e6f0; }
+    .field input { background: #18171a; color: #e8e6f0; border-color: rgba(255,255,255,0.15); }
+    .field input:focus { border-color: #7F77DD; }
+    .submit-btn { background: #222126; color: #e8e6f0; border-color: rgba(255,255,255,0.15); }
+    .submit-btn:hover { background: #2a2830; }
+    .xp-track { background: #2a2830; }
+    .streak-pip { background: #2a2830; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="card pet-wrap">
+    <div class="orb-name" id="orbName">Orb</div>
+    <div class="orb-state" id="orbState">Dormant — awaiting your first session</div>
+    <canvas id="c" width="200" height="200"></canvas>
+    <div class="mood-text" id="moodText">Start coding to wake me up...</div>
+
+    <div class="habit-grid">
+      <div class="habit-box">
+        <div class="habit-val" id="valStreak">0</div>
+        <div class="habit-lbl">day streak</div>
+      </div>
+      <div class="habit-box">
+        <div class="habit-val" id="valHours">0</div>
+        <div class="habit-lbl">hours coded</div>
+      </div>
+      <div class="habit-box">
+        <div class="habit-val" id="valCommits">0</div>
+        <div class="habit-lbl">commits</div>
+      </div>
+    </div>
+
+    <div class="xp-track"><div class="xp-fill" id="xpFill" style="width:0%;background:#7F77DD"></div></div>
+    <div class="xp-row">
+      <span class="xp-label" id="xpLabel">0 / 100 XP</span>
+      <span class="xp-stage" id="xpStage" style="color:#7F77DD">Seed</span>
+    </div>
+
+    <div class="streak-row" id="streakPips"></div>
+    <div class="streak-label" id="streakLabel">Log 7 days in a row to unlock bonus XP</div>
+
+    <button class="evolve-btn" id="evolveBtn" onclick="evolve()">Evolve Orb →</button>
+  </div>
+
+  <div class="card">
+    <div class="log-title">Log a session</div>
+    <div class="field-row">
+      <div class="field">
+        <label>Hours coded</label>
+        <input type="number" id="inHours" min="0" max="24" step="0.5" value="1.5">
+      </div>
+      <div class="field">
+        <label>Commits / bugs fixed</label>
+        <input type="number" id="inCommits" min="0" value="3">
+      </div>
+    </div>
+    <button class="submit-btn" onclick="logSession()">Log session</button>
+  </div>
+
+  <div class="card">
+    <div class="feed-title">Activity feed</div>
+    <div id="feed"><div class="empty-feed">No sessions yet — code something!</div></div>
+  </div>
+
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const STAGES = [
+  { name:"Seed",  label:"Dormant",  xpMax:100,      hue:250, speed:0.004, mag:0.06, nf:3 },
+  { name:"Pulse", label:"Stirring", xpMax:280,      hue:220, speed:0.007, mag:0.11, nf:4 },
+  { name:"Surge", label:"Alive",    xpMax:600,      hue:185, speed:0.013, mag:0.17, nf:5 },
+  { name:"Nexus", label:"Radiant",  xpMax:Infinity, hue:290, speed:0.020, mag:0.23, nf:6 },
+];
+const COLORS = ["#7F77DD","#378ADD","#1D9E75","#D4537E"];
+
+let G = { xp:0, stage:0, streak:0, hours:0, commits:0, days:0, lastDate:null, feed:[] };
+let tick=0, energy=0, energyTarget=0;
+
+function todayStr(){ return new Date().toDateString(); }
+
+function updatePips(){
+  const row = document.getElementById("streakPips");
+  row.innerHTML = "";
+  for(let i=0;i<7;i++){
+    const d=document.createElement("div");
+    d.className="streak-pip"+(i<G.streak?" on":"");
+    row.appendChild(d);
+  }
+  const lbl=document.getElementById("streakLabel");
+  if(G.streak>=7){ lbl.textContent="7-day streak — +25 XP bonus per session!"; lbl.style.color="#7F77DD"; }
+  else if(G.streak>0){ lbl.textContent=G.streak+" / 7 days — keep going!"; lbl.style.color=""; }
+  else { lbl.textContent="Log 7 days in a row to unlock bonus XP"; lbl.style.color=""; }
+}
+
+function updateXP(){
+  const st=STAGES[G.stage];
+  const pct=Math.min(100,Math.round((G.xp/st.xpMax)*100));
+  document.getElementById("xpFill").style.width=pct+"%";
+  document.getElementById("xpFill").style.background=COLORS[G.stage];
+  document.getElementById("xpLabel").textContent=Math.round(G.xp)+" / "+(st.xpMax===Infinity?"MAX":st.xpMax)+" XP";
+  document.getElementById("xpStage").textContent=st.name;
+  document.getElementById("xpStage").style.color=COLORS[G.stage];
+  if(G.xp>=st.xpMax&&G.stage<STAGES.length-1){
+    document.getElementById("evolveBtn").style.display="inline-block";
+  }
+}
+
+function evolve(){
+  G.stage=Math.min(G.stage+1,STAGES.length-1);
+  G.xp=0;
+  document.getElementById("evolveBtn").style.display="none";
+  energyTarget=100;
+  document.getElementById("orbState").textContent=STAGES[G.stage].label+" — evolved!";
+  showToast("Orb evolved to "+STAGES[G.stage].name+"!");
+  updateXP();
+}
+
+function getMood(h,c,s){
+  if(s>=7) return "On fire — 7-day streak! I can feel the energy.";
+  if(h>=6) return "Maximum focus — deep work mode activated.";
+  if(c>=10) return "Commit machine — shipping at full speed.";
+  if(h>=3&&c>=4) return "Solid session — growing stronger.";
+  if(s>=3) return "Streak momentum building — keep going!";
+  if(h>=1||c>=1) return "Warm and humming — good work.";
+  return "Start coding to wake me up...";
+}
+
+function logSession(){
+  const h=parseFloat(document.getElementById("inHours").value)||0;
+  const c=parseInt(document.getElementById("inCommits").value)||0;
+  if(h===0&&c===0){ showToast("Log at least something!"); return; }
+
+  const t=todayStr();
+  if(G.lastDate!==t){
+    if(G.lastDate){
+      const diff=(new Date(t)-new Date(G.lastDate))/86400000;
+      G.streak=diff<=1?Math.min(G.streak+1,99):1;
+    } else { G.streak=1; }
+    G.lastDate=t; G.days++;
+  }
+  G.hours=+(G.hours+h).toFixed(1);
+  G.commits+=c;
+
+  const bonus=G.streak>=7?25:G.streak>=3?10:0;
+  const xp=Math.round(h*18+c*6+bonus);
+  G.xp+=xp;
+  energyTarget=100;
+
+  document.getElementById("valStreak").textContent=G.streak;
+  document.getElementById("valHours").textContent=G.hours;
+  document.getElementById("valCommits").textContent=G.commits;
+  document.getElementById("moodText").textContent=getMood(G.hours,G.commits,G.streak);
+  document.getElementById("orbState").textContent=STAGES[G.stage].label;
+
+  updateXP(); updatePips();
+
+  G.feed.unshift({h,c,xp,streak:G.streak,color:COLORS[G.stage],
+    time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})});
+  if(G.feed.length>8) G.feed.pop();
+  renderFeed();
+  showToast("+"+xp+" XP — Orb energized!");
+}
+
+function renderFeed(){
+  const el=document.getElementById("feed");
+  if(!G.feed.length){ el.innerHTML='<div class="empty-feed">No sessions yet.</div>'; return; }
+  el.innerHTML=G.feed.map(e=>{
+    const p=[];
+    if(e.h>0) p.push(e.h+"h coded");
+    if(e.c>0) p.push(e.c+" commits");
+    if(e.streak>=3) p.push(e.streak+"-day streak");
+    return `<div class="feed-item">
+      <div class="feed-dot" style="background:${e.color}"></div>
+      <div>
+        <div class="feed-text">${p.join(" · ")}</div>
+        <div class="feed-meta">+${e.xp} XP · ${e.time}</div>
+      </div></div>`;
+  }).join("");
+}
+
+function showToast(msg){
+  const t=document.getElementById("toast");
+  t.textContent=msg; t.classList.add("show");
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"),2600);
+}
+
+// --- orb drawing ---
+function blobR(angle, t, mag, nf){
+  let r=1;
+  for(let i=0;i<nf;i++){
+    r+=mag*Math.sin((i+2)*angle+t*(0.6+i*0.35)+i*1.3);
+  }
+  return r;
+}
+
+function drawOrb(){
+  const cv=document.getElementById("c");
+  const ctx=cv.getContext("2d");
+  const W=cv.width,H=cv.height,cx=W/2,cy=H/2;
+  ctx.clearRect(0,0,W,H);
+  tick++;
+
+  // ease energy
+  if(energyTarget>energy) energy=Math.min(energy+2.5,energyTarget);
+  else energy=Math.max(energy-0.6,0);
+  if(energy>=energyTarget&&energyTarget>0) energyTarget=0;
+
+  const st=STAGES[G.stage];
+  const ef=1+energy/180;
+  const baseR=(52+G.stage*10)*ef;
+  const t=tick*st.speed;
+  const mag=st.mag+energy*0.001;
+  const N=100;
+
+  const hue=st.hue+Math.sin(t*0.25)*15;
+
+  // build blob points
+  const pts=[];
+  for(let i=0;i<N;i++){
+    const a=(i/N)*Math.PI*2;
+    const r=blobR(a,t,mag,st.nf)*baseR;
+    pts.push([cx+r*Math.cos(a),cy+r*Math.sin(a)]);
+  }
+
+  // outer glow layers (flat transparency)
+  for(let g=5;g>=1;g--){
+    const sc=1+g*0.05;
+    ctx.beginPath();
+    pts.forEach(([px,py],i)=>{
+      const gx=cx+(px-cx)*sc, gy=cy+(py-cy)*sc;
+      i===0?ctx.moveTo(gx,gy):ctx.lineTo(gx,gy);
+    });
+    ctx.closePath();
+    ctx.fillStyle=`hsla(${hue},68%,62%,${0.048-g*0.007})`;
+    ctx.fill();
+  }
+
+  // main body
+  ctx.beginPath();
+  pts.forEach(([px,py],i)=>i===0?ctx.moveTo(px,py):ctx.lineTo(px,py));
+  ctx.closePath();
+  ctx.fillStyle=`hsl(${hue},62%,58%)`;
+  ctx.fill();
+
+  // inner highlight blob
+  const ipts=[];
+  for(let i=0;i<N;i++){
+    const a=(i/N)*Math.PI*2;
+    const r=blobR(a,t*0.7+2,mag*0.5,st.nf)*baseR*0.5;
+    ipts.push([cx-baseR*0.1+r*Math.cos(a), cy-baseR*0.1+r*Math.sin(a)]);
+  }
+  ctx.beginPath();
+  ipts.forEach(([px,py],i)=>i===0?ctx.moveTo(px,py):ctx.lineTo(px,py));
+  ctx.closePath();
+  ctx.fillStyle=`hsla(${hue+30},80%,82%,0.3)`;
+  ctx.fill();
+
+  // orbiting particles (stage 1+)
+  if(G.stage>=1){
+    const np=2+G.stage*2;
+    for(let i=0;i<np;i++){
+      const oa=t*(1.3+i*0.45)+(i/np)*Math.PI*2;
+      const or=baseR*(1.38+i*0.1+Math.sin(t+i)*0.07);
+      const px=cx+or*Math.cos(oa), py=cy+or*Math.sin(oa);
+      ctx.beginPath();
+      ctx.arc(px,py,2.5+G.stage*0.8,0,Math.PI*2);
+      ctx.fillStyle=`hsla(${hue+40+i*22},78%,70%,0.75)`;
+      ctx.fill();
+    }
+  }
+
+  // ripple ring on fresh energy burst
+  if(energy>40){
+    const rr=baseR*(1.55+(100-energy)*0.01);
+    ctx.beginPath();
+    ctx.arc(cx,cy,rr,0,Math.PI*2);
+    ctx.strokeStyle=`hsla(${hue},65%,65%,${(energy-40)/220})`;
+    ctx.lineWidth=1.5;
+    ctx.stroke();
+  }
+
+  requestAnimationFrame(drawOrb);
+}
+
+updatePips(); updateXP(); drawOrb();
+</script>
+</body>
+</html>
